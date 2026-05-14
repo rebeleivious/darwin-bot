@@ -32,7 +32,7 @@ KNEE_LIM   = 1.2
 MAX_RATE   = 6.0
 
 
-def _build_creature(space, n_legs, start_x, start_y):
+def _build_creature(space, n_legs, start_x, start_y, thigh_l, shin_l, hip_lim, knee_lim):
     TORSO_W = max(60, n_legs * 28)
     tm = pymunk.moment_for_box(TORSO_MASS, (TORSO_W, TORSO_H))
     tb = pymunk.Body(TORSO_MASS, tm)
@@ -46,21 +46,21 @@ def _build_creature(space, n_legs, start_x, start_y):
     for i in range(n_legs):
         hx = start_x - TORSO_W/2 + (TORSO_W/n_legs)*(i+0.5)
         hy = start_y + TORSO_H/2
-        thigh_cy = hy + THIGH_L/2
+        thigh_cy = hy + thigh_l/2
 
-        thm = pymunk.moment_for_box(LEG_MASS, (THIGH_W, THIGH_L))
+        thm = pymunk.moment_for_box(LEG_MASS, (THIGH_W, thigh_l))
         thb = pymunk.Body(LEG_MASS, thm)
         thb.position = (hx, thigh_cy)
-        ths = pymunk.Poly.create_box(thb, (THIGH_W, THIGH_L))
+        ths = pymunk.Poly.create_box(thb, (THIGH_W, thigh_l))
         ths.friction = 0.5; ths.elasticity = 0.0
         ths.filter = pymunk.ShapeFilter(group=1)
         space.add(thb, ths)
 
-        shin_cy = thigh_cy + THIGH_L/2 + SHIN_L/2
-        shm = pymunk.moment_for_box(LEG_MASS*0.5, (SHIN_W, SHIN_L))
+        shin_cy = thigh_cy + thigh_l/2 + shin_l/2
+        shm = pymunk.moment_for_box(LEG_MASS*0.5, (SHIN_W, shin_l))
         shb = pymunk.Body(LEG_MASS*0.5, shm)
         shb.position = (hx, shin_cy)
-        shs = pymunk.Poly.create_box(shb, (SHIN_W, SHIN_L))
+        shs = pymunk.Poly.create_box(shb, (SHIN_W, shin_l))
         shs.friction = 1.5; shs.elasticity = 0.0
         shs.filter = pymunk.ShapeFilter(group=1)
         space.add(shb, shs)
@@ -69,21 +69,22 @@ def _build_creature(space, n_legs, start_x, start_y):
         hpj.error_bias = pow(1-0.1, 60)
         hpm = pymunk.SimpleMotor(tb, thb, 0)
         hpm.max_force = HIP_FORCE
-        hpl = pymunk.RotaryLimitJoint(tb, thb, -HIP_LIM, HIP_LIM)
+        hpl = pymunk.RotaryLimitJoint(tb, thb, -hip_lim, hip_lim)
         space.add(hpj, hpm, hpl)
 
-        kpj = pymunk.PivotJoint(thb, shb, (hx, thigh_cy+THIGH_L/2))
+        kpj = pymunk.PivotJoint(thb, shb, (hx, thigh_cy+thigh_l/2))
         kpj.error_bias = pow(1-0.1, 60)
         kpm = pymunk.SimpleMotor(thb, shb, 0)
         kpm.max_force = KNEE_FORCE
-        kpl = pymunk.RotaryLimitJoint(thb, shb, 0.0, KNEE_LIM)
+        kpl = pymunk.RotaryLimitJoint(thb, shb, 0.0, knee_lim)
         space.add(kpj, kpm, kpl)
 
-        motors.append({'hip': hpm, 'knee': kpm, 'thigh': thb, 'shin': shb})
+        motors.append({'hip': hpm, 'knee': kpm, 'thigh': thb, 'shin': shb,
+                       'shin_l': shin_l})
     return tb, motors
 
 
-def _get_sensors(torso, motors):
+def _get_sensors(torso, motors, hip_lim, knee_lim):
     sensors = [
         math.sin(torso.angle),
         math.cos(torso.angle),
@@ -92,9 +93,9 @@ def _get_sensors(torso, motors):
     for m in motors:
         thigh_rel = m['thigh'].angle - torso.angle
         knee_rel  = m['shin'].angle  - m['thigh'].angle
-        sensors.append(thigh_rel / HIP_LIM)
-        sensors.append(knee_rel  / KNEE_LIM)
-        shin_tip_y = m['shin'].position.y + SHIN_L/2
+        sensors.append(thigh_rel / hip_lim)
+        sensors.append(knee_rel  / knee_lim)
+        shin_tip_y = m['shin'].position.y + m['shin_l']/2
         sensors.append(1.0 if shin_tip_y > GROUND_Y - 12 else 0.0)
     return sensors
 
@@ -108,20 +109,25 @@ def _apply_outputs(outputs, motors):
             m['knee'].rate = float(outputs[ki]) * MAX_RATE
 
 
-def _is_fallen(torso, motors):
-    if torso.position.y > GROUND_Y - 10:
+def _is_fallen(torso, spawn_y):
+    if torso.position.y > spawn_y + 30:   # torso dropped >30px from start
         return True
-    if abs(torso.angle) > 1.2:
+    if abs(torso.angle) > 0.7:            # ~40 degrees tilt
         return True
     return False
 
 
-def _spawn_y(n_legs):
-    return GROUND_Y - THIGH_L - SHIN_L - TORSO_H - 20
+def _spawn_y(thigh_l, shin_l):
+    return GROUND_Y - thigh_l - shin_l - TORSO_H - 20
 
 
-def evaluate_genome(genome, config, body_spec, fitness_fn):
-    n_legs = body_spec["n_legs"]
+def evaluate_genome(genome, config, body_spec, fitness_fn, metrics_fn=None):
+    n_legs    = body_spec["n_legs"]
+    thigh_l   = int(body_spec.get("thigh_len",  THIGH_L / PIXELS_PER_M) * PIXELS_PER_M)
+    shin_l    = int(body_spec.get("shin_len",   SHIN_L  / PIXELS_PER_M) * PIXELS_PER_M)
+    hip_lim   = body_spec.get("hip_range",  HIP_LIM)
+    knee_lim  = body_spec.get("knee_range", KNEE_LIM)
+
     space = pymunk.Space()
     space.gravity = GRAVITY
     space.damping = DAMPING
@@ -129,20 +135,24 @@ def evaluate_genome(genome, config, body_spec, fitness_fn):
     ground.friction = 1.2; ground.elasticity = 0.0
     space.add(ground)
 
-    torso, motors = _build_creature(space, n_legs, 300, _spawn_y(n_legs))
+    torso, motors = _build_creature(space, n_legs, 300, _spawn_y(thigh_l, shin_l),
+                                    thigh_l, shin_l, hip_lim, knee_lim)
     net = neat.nn.FeedForwardNetwork.create(genome, config)
 
     for _ in range(int(0.4/DT)):
         for __ in range(SUBSTEPS):
             space.step(DT/SUBSTEPS)
 
-    start_x = torso.position.x
+    start_x  = torso.position.x
+    spawn_y  = torso.position.y          # record settled resting height
     falls = 0; fell_last = False
     prev_vx = 0.0; total_jerk = 0.0; step_count = 0
+    legs_active_frames = 0               # frames where ≥half the legs touched ground
+    custom_totals = {}                   # accumulated custom metrics from metrics_fn
     steps = int(SIM_SECONDS / DT)
 
     for _ in range(steps):
-        sensors = _get_sensors(torso, motors)
+        sensors = _get_sensors(torso, motors, hip_lim, knee_lim)
         outputs = net.activate(sensors)
         _apply_outputs(outputs, motors)
         for __ in range(SUBSTEPS):
@@ -152,16 +162,41 @@ def evaluate_genome(genome, config, body_spec, fitness_fn):
             step_count += 1
         total_jerk += abs(vx - prev_vx)
         prev_vx = vx
-        if _is_fallen(torso, motors):
+        # count legs with foot near ground
+        feet_down = sum(
+            1 for m in motors
+            if m['shin'].position.y + m['shin_l']/2 > GROUND_Y - 12
+        )
+        if feet_down >= max(1, n_legs // 2):
+            legs_active_frames += 1
+        if _is_fallen(torso, spawn_y):
             if not fell_last: falls += 1
             fell_last = True
         else:
             fell_last = False
 
+        # call student metrics hook if provided
+        if metrics_fn is not None:
+            step_data = {
+                "vx":           vx,
+                "vy":           torso.velocity.y,
+                "torso_angle":  torso.angle,
+                "torso_height": GROUND_Y - torso.position.y,
+                "feet_down":    feet_down,
+                "fallen":       fell_last,
+            }
+            custom = metrics_fn(step_data)
+            if custom:
+                for k, v in custom.items():
+                    custom_totals[k] = custom_totals.get(k, 0) + v
+
     distance   = max(0.0, (torso.position.x - start_x) / PIXELS_PER_M)
     smoothness = 1.0 / (1.0 + total_jerk / max(steps, 1))
+    legs_active = round(legs_active_frames / max(steps, 1), 4)   # 0.0–1.0 fraction of run
     raw = {"distance": round(distance,4), "falls": falls,
-           "smoothness": round(smoothness,4), "step_count": step_count}
+           "smoothness": round(smoothness,4), "step_count": step_count,
+           "legs_active": legs_active}
+    raw.update(custom_totals)   # merge in any student-defined metrics
     fitness = fitness_fn(raw)
     genome.fitness = fitness
     raw["fitness"] = round(fitness, 4)
@@ -170,12 +205,15 @@ def evaluate_genome(genome, config, body_spec, fitness_fn):
 
 def run_evolution(team_folder, body_spec, fitness_fn,
                   config_path=None, generations=50,
-                  verbose=True, visual=True, gen_counter=None):
+                  verbose=True, visual=True, gen_counter=None,
+                  metrics_fn=None):
 
     if config_path is None:
         config_path = os.path.join(team_folder, "config.ini")
 
-    n_legs = body_spec["n_legs"]
+    n_legs   = body_spec["n_legs"]
+    thigh_l  = int(body_spec.get("thigh_len",  THIGH_L / PIXELS_PER_M) * PIXELS_PER_M)
+    shin_l   = int(body_spec.get("shin_len",   SHIN_L  / PIXELS_PER_M) * PIXELS_PER_M)
     _patch_config(config_path, 3 + n_legs*3, n_legs*2)
 
     with open(config_path, "r", encoding="utf-8") as f:
@@ -197,7 +235,7 @@ def run_evolution(team_folder, body_spec, fitness_fn,
     def eval_genomes(genomes, cfg):
         best_this = -9999; best_g = None; best_s = None
         for gid, genome in genomes:
-            score = evaluate_genome(genome, cfg, body_spec, fitness_fn)
+            score = evaluate_genome(genome, cfg, body_spec, fitness_fn, metrics_fn)
             if score["fitness"] > best_this:
                 best_this = score["fitness"]; best_g = genome; best_s = score
         best_scores.append(best_this)
@@ -220,7 +258,7 @@ def run_evolution(team_folder, body_spec, fitness_fn,
             "history": best_scores[-50:]})
 
     winner = population.run(eval_genomes, generations)
-    final  = evaluate_genome(winner, config, body_spec, fitness_fn)
+    final  = evaluate_genome(winner, config, body_spec, fitness_fn, metrics_fn)
     _write_score(team_folder, {"generation": generations,
         "best_fitness": final["fitness"], "distance": final["distance"],
         "step_count": final["step_count"], "history": best_scores})
@@ -236,7 +274,11 @@ def _replay(genome, config, body_spec, gen_num, best_ever, quit_flag):
         import pygame
     except ImportError:
         return
-    n_legs = body_spec["n_legs"]
+    n_legs   = body_spec["n_legs"]
+    thigh_l  = int(body_spec.get("thigh_len",  THIGH_L / PIXELS_PER_M) * PIXELS_PER_M)
+    shin_l   = int(body_spec.get("shin_len",   SHIN_L  / PIXELS_PER_M) * PIXELS_PER_M)
+    hip_lim  = body_spec.get("hip_range",  HIP_LIM)
+    knee_lim = body_spec.get("knee_range", KNEE_LIM)
     TORSO_W = max(60, n_legs*28)
     W, H = 960, 480
     pygame.init()
@@ -249,13 +291,15 @@ def _replay(genome, config, body_spec, gen_num, best_ever, quit_flag):
     space = pymunk.Space(); space.gravity = GRAVITY; space.damping = DAMPING
     ground = pymunk.Segment(space.static_body, (-99999,GROUND_Y),(99999,GROUND_Y),4)
     ground.friction=1.2; ground.elasticity=0.0; space.add(ground)
-    torso, motors = _build_creature(space, n_legs, 300, _spawn_y(n_legs))
+    torso, motors = _build_creature(space, n_legs, 300, _spawn_y(thigh_l, shin_l),
+                                    thigh_l, shin_l, hip_lim, knee_lim)
     net = neat.nn.FeedForwardNetwork.create(genome, config)
 
     for _ in range(int(0.4/DT)):
         for __ in range(SUBSTEPS): space.step(DT/SUBSTEPS)
 
     start_x = torso.position.x
+    spawn_y = torso.position.y
     steps   = int(SIM_SECONDS/DT)
 
     for step in range(steps):
@@ -264,7 +308,7 @@ def _replay(genome, config, body_spec, gen_num, best_ever, quit_flag):
                 event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 quit_flag[0] = True; pygame.quit(); return
 
-        sensors = _get_sensors(torso, motors)
+        sensors = _get_sensors(torso, motors, hip_lim, knee_lim)
         outputs = net.activate(sensors)
         _apply_outputs(outputs, motors)
         for _ in range(SUBSTEPS): space.step(DT/SUBSTEPS)
@@ -287,10 +331,10 @@ def _replay(genome, config, body_spec, gen_num, best_ever, quit_flag):
             thb = m['thigh']; shb = m['shin']
             hx_w = torso.position.x - TORSO_W/2 + (TORSO_W/n_legs)*(i+0.5)
             hy_w = torso.position.y + TORSO_H/2
-            kx = thb.position.x + THIGH_L/2*math.sin(thb.angle)
-            ky = thb.position.y + THIGH_L/2*math.cos(thb.angle)
-            fx = shb.position.x + SHIN_L/2*math.sin(shb.angle)
-            fy = shb.position.y + SHIN_L/2*math.cos(shb.angle)
+            kx = thb.position.x + thigh_l/2*math.sin(thb.angle)
+            ky = thb.position.y + thigh_l/2*math.cos(thb.angle)
+            fx = shb.position.x + shin_l/2*math.sin(shb.angle)
+            fy = shb.position.y + shin_l/2*math.cos(shb.angle)
             def s(wx,wy): return (int(wx-camera_x), int(wy))
             pygame.draw.line(screen,col,s(hx_w,hy_w),s(kx,ky),6)
             pygame.draw.line(screen,dark,s(kx,ky),s(fx,fy),5)
@@ -307,7 +351,7 @@ def _replay(genome, config, body_spec, gen_num, best_ever, quit_flag):
 
         # HUD
         dist = max(0.0,(torso.position.x-start_x)/PIXELS_PER_M)
-        status = "FALLEN" if _is_fallen(torso,motors) else "walking"
+        status = "FALLEN" if _is_fallen(torso, spawn_y) else "walking"
         for j,line in enumerate([
             f"Gen {gen_num}  |  {dist:.2f}m  [{status}]",
             f"Best ever: {best_ever['distance']:.2f}m",

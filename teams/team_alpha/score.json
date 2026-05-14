@@ -1,12 +1,11 @@
 {
-  "generation": 4,
-  "best_fitness": 117.559,
-  "distance": 8.9209,
-  "step_count": 567,
+  "generation": 3,
+  "best_fitness": 151.519,
+  "distance": 11.7994,
+  "step_count": 575,
   "history": [
-    117.559,
-    117.559,
-    117.559,
-    117.559
+    151.519,
+    151.519,
+    151.519
   ]
 }
