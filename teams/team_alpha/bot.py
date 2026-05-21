@@ -78,13 +78,107 @@ import arena
 #    - Once your creature walks, try changing one value at a time.
 #    - Changing n_legs changes the neural network size — retrain from scratch.
 
+# ══════════════════════════════════════════════════════════════════════
+#  STEP 1 — DESIGN YOUR BODY (OPTIMIZED FOR HIGH STRIDE VELOCITY)
+# ══════════════════════════════════════════════════════════════════════
 BODY = {
-    "n_legs":     2,      # biped — best starting point
-    "thigh_len":  0.45,   # upper leg: 45 cm
-    "shin_len":   0.38,   # lower leg: 38 cm
-    "hip_range":  0.85,   # hip swing: ~49 degrees each way
-    "knee_range": 1.0,    # knee bend: ~57 degrees
+    "n_legs":     4,      # Quadruped baseline stability
+    "thigh_len":  0.50,   # Increased leverage length for a wider stride
+    "shin_len":   0.40,   # Balanced ground reach clearance
+    "hip_range":  1.10,   # Open swing arc for massive forward lunges
+    "knee_range": 1.10,   # Rigid extension for powerful push-offs
 }
+
+# ══════════════════════════════════════════════════════════════════════
+#  STEP 2 — WRITE YOUR FITNESS FUNCTION (RAW DISTANCE MAXIMIZATION)
+# ══════════════════════════════════════════════════════════════════════
+CURRENT_GEN = [0]
+# ══════════════════════════════════════════════════════════════════════
+#  STEP 1 — DESIGN YOUR BODY (MAX POWER EXTENSION CHASSIS)
+# ══════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════
+#  STEP 1 — DESIGN YOUR BODY (MAX ADVANTAGE PROPORTIONS)
+# ══════════════════════════════════════════════════════════════════════
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  STEP 2 — WRITE YOUR FITNESS FUNCTION (NON-DESTRUCTIVE GRADIENT)
+# ══════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════
+#  STEP 1 — DESIGN YOUR BODY (MAX LEVEL POWER PROPORTIONS)
+# ══════════════════════════════════════════════════════════════════════
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  STEP 2 — WRITE YOUR FITNESS FUNCTION (VELOCITY ACCELERATOR)
+# ══════════════════════════════════════════════════════════════════════
+def my_fitness(data):
+    # Rule 1 Compliance: Fallen structures always score below upright ones.
+    if data["falls"] > 0:
+        return -1000.0 * data["falls"] + data["distance"] * 0.1
+
+    # Golden Rule Anti-Flat Bonus: Standing upright ensures a baseline survival score.
+    # This prevents random search stall in Generation 1.
+    score = 100.0 
+
+    # EXPONENTIAL DISTANCE SCALING:
+    # 20m = 400 pts | 26m = 676 pts | 35m = 1225 pts.
+    # This steep curve forces the network to prioritize distance maximization.
+    score += (data["distance"] ** 2) * 1.5
+
+    # SPEED REWARD INTEGRATION:
+    # Heavily reward high-velocity frames and elite sprint breakthroughs
+    score += data["velocity_drive"] * 2.0
+    score += data["sprint_frames"] * 15.0
+
+    # DOWNSCALE PASSIVE FRAME FILLERS:
+    # Reduce the weight of passive survival metrics so they don't flatten the pool
+    score += data["step_count"] * 0.2
+    score += data["legs_active"] * 10.0  
+
+    # STYLE MODIFIERS:
+    # Additive only. This ensures top speed is never throttled by a multiplier.
+    score += data["smoothness"] * 30.0
+    score -= data["backward_frames"] * 100.0  # Eliminate backtracking completely
+
+    return score
+
+# ══════════════════════════════════════════════════════════════════════
+#  STEP 3 — DEFINE CUSTOM PER-FRAME VELOCITY METRICS
+# ══════════════════════════════════════════════════════════════════════
+def my_metrics(step_data):
+    vx = step_data["vx"]
+    
+    return {
+        # Identify and punish reverse motion immediately
+        "backward_frames": 1 if vx < -2 else 0,
+        
+        # VELOCITY DRIVE: Evaluates how fast the creature runs per frame.
+        # Squaring the velocity gives an immense mathematical boost to fast 
+        # actions, forcing NEAT to select for explosive velocity changes.
+        "velocity_drive": ((vx / 10.0) ** 2) if vx > 0 else 0,
+        
+        # SPRINT TRACKER: Explicit bonus for breaking past competitive speeds
+        "sprint_frames": 1 if vx > 150 else 0,
+    }
+
+# Execution state verification
+MODE        = "train"    
+GENERATIONS = 200
+
+# ══════════════════════════════════════════════════════════════════════
+#  STEP 2 — WRITE YOUR FITNESS FUNCTION (NON-DESTRUCTIVE GRADIENT)
+# ══════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════
+#  STEP 1 — DESIGN YOUR BODY (COMPACT POWER-EXTENSION CHASSIS)
+# ══════════════════════════════════════════════════════════════════════
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  STEP 2 — WRITE YOUR FITNESS FUNCTION (NON-DESTRUCTIVE GRADIENT)
+# ══════════════════════════════════════════════════════════════════════
+
+       # Let it cook for the full 100 generations
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -138,144 +232,62 @@ BODY = {
 
 CURRENT_GEN = [0]   # automatically updated each generation — read-only
 
-def my_fitness(data):
+# def my_fitness(data):
+#     # ── PART A: Hard penalty for falling ──────────────────────────────
+#     # Unchanged structural rule to keep fallen agents at the bottom of the pool.
+#     if data["falls"] > 0:
+#         return -50.0 * data["falls"] + data["distance"] * 0.1
 
-    # ── PART A: Hard penalty for falling ──────────────────────────────
-    #
-    # Any creature that fell scores negative — always below an upright
-    # walker. The tiny distance bonus (× 0.1) gives NEAT a weak gradient
-    # in early generations when everything is falling anyway.
-    #
-    if data["falls"] > 0:
-        return -10.0 * data["falls"] + data["distance"] * 0.1
+#     # ── PART B: Reward High-Velocity, Stable Walking ──────────────────
+    
+#     # 1. Primary Driver: High-reward scale for pure forward progress
+#     score = data["distance"] * 100.0  
+    
+#     # 2. Velocity Driver: Accumulate points for high sustained forward speeds
+#     score += data["fwd_speed"] * 2.0  
+    
+#     # 3. Step Efficiency: Reward taking steps, but keep its scale proportional 
+#     # to distance so it doesn't overpower the main objective (Max 600 * 0.2 = 120)
+#     score += data["step_count"] * 0.2  
+    
+#     # 4. Leg Support: Ensure it utilizes its legs effectively to prevent dragging
+#     score += data["legs_active"] * 25.0  
 
-    # ── PART B: Reward upright walking ────────────────────────────────
-    #
-    # distance × 10   is the primary reward — walk further, score higher.
-    #
-    # step_count × 0.05   rewards actively stepping rather than gliding.
-    # A creature that tips forward and slides gets distance but no steps.
-    #
-    # legs_active × 5   rewards using all legs. Without this, evolution
-    # often ignores half the legs and just drags on two — it's easier.
-    #
-    score  = data["distance"]    * 10.0
-    score += data["step_count"]  *  0.05
-    score += data["legs_active"] *  5.0
-    return score
+#     # ── PART C: Additive Style Penalties & Bonuses ────────────────────
+    
+#     # Smoothness: Reward an elegant gait additively so it doesn't crush the raw distance score
+#     score += data["smoothness"] * 30.0  
+    
+#     # Air Frames: Penalize bouncing/hopping behaviors
+#     score -= data["air_frames"] * 0.5  
+    
+#     # Backward Frames: Punish regression severely
+#     score -= data["backward_frames"] * 15.0  
+    
+#     # Torso Instability: Penalize excessive shaking or extreme tilts
+#     score -= data["torso_instability"] * 0.5  
 
-    # ══════════════════════════════════════════════════════════════════════
-    #  ALL AVAILABLE DATA POINTS
-    # ══════════════════════════════════════════════════════════════════════
-    #
-    #  ── BUILT-IN  (always in data{} inside my_fitness) ──────────────────
-    #
-    #  data["distance"]       metres moved forward over the 10s run
-    #                         0.0 = didn't move,  ~10.0 = very fast
-    #
-    #  data["falls"]          number of times the body collapsed
-    #                         0 = never fell,  1+ = fell at least once
-    #
-    #  data["smoothness"]     how steady the forward velocity was
-    #                         0.0 = very jerky,  1.0 = perfectly smooth
-    #
-    #  data["step_count"]     frames where forward velocity > 5 px/s
-    #                         0 = never moved forward,  600 = moving all run
-    #
-    #  data["legs_active"]    fraction of run where ≥ half the legs had a
-    #                         foot on the ground simultaneously
-    #                         0.0 = dragging on one leg,  1.0 = fully supported
-    #
-    #  ── PER-FRAME  (available in step_data{} inside my_metrics) ─────────
-    #
-    #  step_data["vx"]           horizontal velocity of torso  (pixels/sec)
-    #                            positive = moving forward
-    #                            negative = moving backward
-    #
-    #  step_data["vy"]           vertical velocity of torso  (pixels/sec)
-    #                            negative = moving UP   ← y-axis is flipped!
-    #                            positive = moving DOWN / falling
-    #
-    #  step_data["torso_angle"]  body tilt in radians
-    #                            0.0  = perfectly upright
-    #                            ±0.7 = about to be marked fallen (~40°)
-    #
-    #  step_data["torso_height"] pixels between torso centre and the ground
-    #                            larger = more upright / higher in the air
-    #
-    #  step_data["feet_down"]    number of feet currently touching the ground
-    #                            0       = fully airborne
-    #                            n_legs  = all feet planted
-    #
-    #  step_data["fallen"]       True if the creature is currently fallen
-    #
-    #  ── CUSTOM  (you define these in my_metrics, they land in data{}) ────
-    #
-    #  Return any {str: number} from my_metrics() and it will be summed
-    #  across all 600 frames and available in data{} inside my_fitness().
-    #
-    #  Example:
-    #    def my_metrics(step_data):
-    #        return {"backward_frames": 1 if step_data["vx"] < -2 else 0}
-    #
-    #    → data["backward_frames"] in my_fitness = total backward frames
-    # ══════════════════════════════════════════════════════════════════════
+#     return score
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  OPTIONAL — DEFINE YOUR OWN PER-FRAME METRICS
-# ══════════════════════════════════════════════════════════════════════
-#
-#  The built-in metrics are summaries over the whole 10-second run.
-#  my_metrics() lets you measure something more specific per frame.
-#
-#  It is called 600 times per evaluation (once per simulation frame).
-#  Whatever numbers you return are SUMMED across all frames, then
-#  added to data{} so your fitness function can use them.
-#
-#  What you get each frame in step_data:
-#
-#    step_data["vx"]           — horizontal velocity (px/s)
-#                                positive = moving forward
-#                                negative = moving backward
-#
-#    step_data["vy"]           — vertical velocity (px/s)
-#                                negative = moving UP (physics y-axis is flipped)
-#                                positive = moving DOWN / falling
-#
-#    step_data["torso_angle"]  — body tilt in radians
-#                                0.0 = perfectly upright
-#                                ±0.7 = about to be marked as fallen (~40°)
-#
-#    step_data["torso_height"] — pixels between torso centre and ground
-#
-#    step_data["feet_down"]    — number of feet currently touching the ground
-#                                0 = fully airborne, n_legs = all planted
-#
-#    step_data["fallen"]       — True if currently fallen
-#
-#  RULES:
-#    - Return a flat dict of string → number. No nested dicts.
-#    - Do not use these reserved key names:
-#      distance, falls, smoothness, step_count, legs_active, fitness
-#    - Keep it fast — this runs 600 × population_size times per generation.
-#
-#  To disable, set:  my_metrics = None
+# def my_metrics(step_data):
+#     # Quantify the absolute deviation of the torso tilt
+#     abs_tilt = abs(step_data["torso_angle"])
+    
+#     return {
+#         # Frame-by-frame backward movement tracking
+#         "backward_frames": 1 if step_data["vx"] < -2 else 0,
+        
+#         # Linear velocity mapping: only capture clean forward speed
+#         "fwd_speed": step_data["vx"] if step_data["vx"] > 0 else 0,
 
-def my_metrics(step_data):
-    return {
-
-        # Frames where the creature moves backward.
-        # Penalise in fitness with:  score -= data["backward_frames"] * 0.02
-        "backward_frames": 1 if step_data["vx"] < -2 else 0,
-
-        # Frames where no feet are on the ground at all.
-        # High values = hopping or bouncing rather than walking.
-        # Penalise with:  score -= data["air_frames"] * 0.01
-        "air_frames": 1 if step_data["feet_down"] == 0 else 0,
-
-    }
-
+#         # Track airborne phase to discourage hopping
+#         "air_frames": 1 if step_data["feet_down"] == 0 else 0,
+        
+#         # Torso Instability: Allow a natural lean zone up to ~0.15 rad (~8.5 degrees).
+#         # Anything beyond that gets penalized linearly to discourage heavy wobbling.
+#         "torso_instability": abs_tilt if abs_tilt > 0.15 else 0.0,
+#     }
 # Uncomment this line to disable custom metrics entirely:
 # my_metrics = None
 
@@ -309,8 +321,8 @@ def my_metrics(step_data):
 #  problem is almost always the fitness function, not the generation count.
 #  Revisit Step 2 before running longer.
 
-MODE        = "train"    # start here — switch to "train" once test passes
-GENERATIONS = 100
+# MODE        = "train"    # start here — switch to "train" once test passes
+# GENERATIONS = 100
 
 
 # ══════════════════════════════════════════════════════════════════════
